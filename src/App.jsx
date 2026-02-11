@@ -24,7 +24,9 @@ const loadScores = () => {
 const saveScores = (scores) => {
   try {
     localStorage.setItem(SCORES_STORAGE_KEY, JSON.stringify(scores));
-  } catch (_) {}
+  } catch {
+    // ignore write errors
+  }
 };
 
 function App() {
@@ -34,6 +36,71 @@ function App() {
   const [winningLine, setWinningLine] = useState([]);
   const [gameStarted, setGameStarted] = useState(false);
   const [scores, setScores] = useState(() => loadScores());
+  const [moveHistory, setMoveHistory] = useState([]);
+
+  const getMaxStreakForPlayer = (squares, player) => {
+    const directions = [
+      [0, 1],
+      [1, 0],
+      [1, 1],
+      [1, -1],
+    ];
+
+    let maxStreak = 0;
+
+    for (let index = 0; index < squares.length; index++) {
+      if (squares[index] !== player) continue;
+
+      const row = Math.floor(index / BOARD_SIZE);
+      const col = index % BOARD_SIZE;
+
+      for (const [dx, dy] of directions) {
+        let count = 1;
+
+        for (let i = 1; ; i++) {
+          const newRow = row + dx * i;
+          const newCol = col + dy * i;
+          if (
+            newRow < 0 ||
+            newRow >= BOARD_SIZE ||
+            newCol < 0 ||
+            newCol >= BOARD_SIZE
+          )
+            break;
+          const newIndex = newRow * BOARD_SIZE + newCol;
+          if (squares[newIndex] === player) {
+            count++;
+          } else {
+            break;
+          }
+        }
+
+        for (let i = 1; ; i++) {
+          const newRow = row - dx * i;
+          const newCol = col - dy * i;
+          if (
+            newRow < 0 ||
+            newRow >= BOARD_SIZE ||
+            newCol < 0 ||
+            newCol >= BOARD_SIZE
+          )
+            break;
+          const newIndex = newRow * BOARD_SIZE + newCol;
+          if (squares[newIndex] === player) {
+            count++;
+          } else {
+            break;
+          }
+        }
+
+        if (count > maxStreak) {
+          maxStreak = count;
+        }
+      }
+    }
+
+    return maxStreak;
+  };
 
   const checkWinner = (squares, index) => {
     const row = Math.floor(index / BOARD_SIZE);
@@ -102,6 +169,23 @@ function App() {
     newBoard[index] = currentPlayer;
     setBoard(newBoard);
 
+    const maxStreak = getMaxStreakForPlayer(newBoard, currentPlayer);
+    const now = new Date();
+    const timeLabel = now.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    setMoveHistory((prev) => [
+      ...prev,
+      {
+        time: timeLabel,
+        player: currentPlayer,
+        maxStreak,
+      },
+    ]);
+
     const result = checkWinner(newBoard, index);
     if (result) {
       setWinner(result.winner);
@@ -122,6 +206,7 @@ function App() {
     setCurrentPlayer("blue");
     setWinner(null);
     setWinningLine([]);
+    setMoveHistory([]);
     setGameStarted(true);
   };
 
@@ -162,18 +247,56 @@ function App() {
         </div>
       </div>
 
-      <div className="board">
-        {board.map((value, index) => (
-          <div
-            key={index}
-            className={`cell ${value ? value : ""} ${
-              winningLine.includes(index) ? "winning" : ""
-            }`}
-            onClick={() => handleClick(index)}
-          >
-            {value && <div className={`stone ${value}`}></div>}
-          </div>
-        ))}
+      <div className="game-layout">
+        <div className="board">
+          {board.map((value, index) => (
+            <div
+              key={index}
+              className={`cell ${value ? value : ""} ${
+                winningLine.includes(index) ? "winning" : ""
+              }`}
+              onClick={() => handleClick(index)}
+            >
+              {value && <div className={`stone ${value}`}></div>}
+            </div>
+          ))}
+        </div>
+
+        <aside className="sidebar">
+          <h2 className="sidebar-title">Move history</h2>
+          {moveHistory.length === 0 ? (
+            <p className="sidebar-empty">No moves yet.</p>
+          ) : (
+            <div className="sidebar-table-wrapper">
+              <table className="moves-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Player</th>
+                    <th>Longest streak</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moveHistory.map((move, idx) => (
+                    <tr key={`${move.time}-${idx}`}>
+                      <td>{move.time}</td>
+                      <td>
+                        <span
+                          className={`move-player-badge ${
+                            move.player === "blue" ? "blue" : "red"
+                          }`}
+                        >
+                          {move.player === "blue" ? "Player 1" : "Player 2"}
+                        </span>
+                      </td>
+                      <td>{move.maxStreak}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </aside>
       </div>
 
       {winner && (
